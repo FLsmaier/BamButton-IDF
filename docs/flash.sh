@@ -1,6 +1,8 @@
 #!/bin/bash
+set -euo pipefail
 
-# Flash a BamButton-IDF ESP32-C3. Pass the serial port, or use /dev/ttyACM0.
+# Flash a BamButton-IDF ESP32-C3 once, then exit.
+# Pass the serial port, or use /dev/ttyACM0.
 TTY_DEV=${1:-/dev/ttyACM0}
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -25,6 +27,11 @@ for image in "$bootloader" "$partition" "$otadata" "$app"; do
     fi
 done
 
+if [[ ! -c "$TTY_DEV" ]]; then
+    echo "Port $TTY_DEV is not available."
+    exit 1
+fi
+
 # Prefer an installed esptool; otherwise run one through uv.
 if command -v esptool >/dev/null 2>&1; then
     ESPTOOL=(esptool)
@@ -36,39 +43,30 @@ else
     exit 1
 fi
 
-waiting_logged=false
+# A full flash replaces the partition table, so the old contents have to go.
+"${ESPTOOL[@]}" --chip esp32c3 --port "$TTY_DEV" erase-flash
 
-while true; do
-    if [[ ! -c "$TTY_DEV" ]]; then
-        if [[ "$waiting_logged" = false ]]; then
-            echo "Port $TTY_DEV is not available, waiting for a board..."
-            waiting_logged=true
-        fi
-        sleep 1
-        continue
-    fi
+"${ESPTOOL[@]}" --chip esp32c3 --port "$TTY_DEV" --baud 460800 \
+    --before default-reset --after hard-reset write-flash \
+    --flash-mode dio --flash-freq 80m --flash-size 4MB \
+    0x0 "$bootloader" \
+    0x8000 "$partition" \
+    0xd000 "$otadata" \
+    0x10000 "$app"
 
-    waiting_logged=false
+echo "Flashed $TTY_DEV."
 
-    # A full flash replaces the partition table, so the old contents have to go.
-    "${ESPTOOL[@]}" --chip esp32c3 --port "$TTY_DEV" erase-flash
+if ! command -v tio >/dev/null 2>&1; then
+    echo "tio is not installed, so the log was not opened."
+    exit 0
+fi
 
-    "${ESPTOOL[@]}" --chip esp32c3 --port "$TTY_DEV" --baud 460800 \
-        --before default-reset --after hard-reset write-flash \
-        --flash-mode dio --flash-freq 80m --flash-size 4MB \
-        0x0 "$bootloader" \
-        0x8000 "$partition" \
-        0xd000 "$otadata" \
-        0x10000 "$app"
-
-    if command -v tio >/dev/null 2>&1; then
-        sleep 1
-        # -n: exit when the port closes, then this loop flashes the next board.
-        tio "$TTY_DEV" -n
-    else
-        echo "Flashed. Unplug the board to flash another, or press Ctrl-C."
-        while [[ -c "$TTY_DEV" ]]; do
-            sleep 1
-        done
-    fi
-done
+echo "Opening $TTY_DEV. Quit with Ctrl-T q."
+# This board's console is the USB serial/JTAG port. DTR low keeps GPIO9 out
+# of download mode. Pulsing RTS resets the chip, the same way the ESP-IDF
+# monitor does. The port can vanish during that reset, so reconnect stays
+# on, and the pulse runs only the first time the port opens.
+tio --baudrate 115200 --flow none \
+    --script 'set{DTR=low,RTS=high}; msleep(200); set{DTR=low,RTS=low}' \
+    --script-run once \
+    "$TTY_DEV"

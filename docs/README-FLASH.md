@@ -44,9 +44,9 @@ uv tool install esptool
 ./flash.sh /dev/ttyACM0
 ```
 
-The script waits until the port exists, erases the flash, writes the four images, and then opens `tio` if it is installed. Unplug the board and plug in another to flash the next one. Ctrl-C stops the loop.
+The script erases the flash, writes the four images once, and then opens `tio`. Quit that session with Ctrl-T then q, and the script exits.
 
-The same write, without the loop:
+The same write, run by hand:
 
 ```bash
 esptool --chip esp32c3 --port /dev/ttyACM0 --baud 460800 \
