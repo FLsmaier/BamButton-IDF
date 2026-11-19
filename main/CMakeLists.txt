@@ -1,0 +1,30 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "bb_config.c"
+        "bb_nvs.c"
+        "bb_wifi.c"
+        "bb_web.c"
+        "bb_ota.c"
+        "bb_api.c"
+        "bb_led.c"
+        "bb_button.c"
+    INCLUDE_DIRS "."
+    PRIV_REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
+        esp_http_client
+        esp_timer
+        esp_driver_gpio
+        app_update
+        esp_app_format
+        bootloader_support
+        json
+        mbedtls
+        mdns
+        esp_hw_support
+        esp_system
+)

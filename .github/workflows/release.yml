@@ -1,0 +1,145 @@
+name: Release
+
+# Builds only when a semver tag is pushed, then attaches the firmware to
+# that tag's GitHub release. Branch pushes do not run this workflow.
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so `git describe` inside the image sees this tag.
+          fetch-depth: 0
+
+      - name: Version from tag
+        id: version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="$tag"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Tag ${tag} is not MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          if ((${#version} > 31)); then
+            echo "Version ${version} does not fit in the firmware version field" >&2
+            exit 1
+          fi
+          described="$(git describe --always --tags --dirty)"
+          if [[ "$described" != "$version" ]]; then
+            echo "git describe is '${described}', expected tag ${version}" >&2
+            exit 1
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/project" \
+            -w /project \
+            -e IDF_GIT_SAFE_DIR=/project \
+            espressif/idf:v5.5.6 \
+            /bin/bash -c 'idf.py build && idf.py merge-bin -f raw && chmod -R a+rX build'
+
+      - name: Package firmware
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          app="build/bambutton.bin"
+          test -s "$app"
+          test -s build/merged-binary.bin
+          test -s build/bootloader/bootloader.bin
+          test -s build/partition_table/partition-table.bin
+          test -s build/ota_data_initial.bin
+          if ! strings -a -n "${#VERSION}" "$app" | grep -F -x -- "$VERSION" >/dev/null; then
+            echo "Application image is not version ${VERSION}" >&2
+            exit 1
+          fi
+          stage="$(mktemp -d)"
+          cp docs/flash.sh docs/README-FLASH.md "$stage/"
+          chmod +x "$stage/flash.sh"
+          cp build/bootloader/bootloader.bin "$stage/bootloader.bin"
+          cp build/partition_table/partition-table.bin "$stage/partition-table.bin"
+          cp build/ota_data_initial.bin "$stage/ota_data_initial.bin"
+          cp "$app" "$stage/bambutton.bin"
+          cp build/merged-binary.bin "$stage/bambutton-flash.bin"
+          mkdir -p dist
+          python3 - "$stage" "dist/bambutton-${VERSION}.zip" <<'PY'
+          import os
+          import sys
+          import zipfile
+
+          stage, dest = sys.argv[1:]
+          names = [
+              "flash.sh",
+              "README-FLASH.md",
+              "bootloader.bin",
+              "partition-table.bin",
+              "ota_data_initial.bin",
+              "bambutton.bin",
+              "bambutton-flash.bin",
+          ]
+          with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+              for name in names:
+                  path = os.path.join(stage, name)
+                  info = zipfile.ZipInfo(name)
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.create_system = 3
+                  info.external_attr = (0o100755 if name == "flash.sh" else 0o100644) << 16
+                  with open(path, "rb") as source:
+                      archive.writestr(info, source.read())
+          PY
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          package="dist/bambutton-${VERSION}.zip"
+          notes="$(mktemp)"
+          cat > "$notes" <<EOF
+          Firmware for the ESP32-C3 Super Mini, built with ESP-IDF 5.5.6.
+
+          bambutton-${VERSION}.zip unpacks to one directory. README-FLASH.md in that directory is the flash guide.
+
+          ./flash.sh erases the chip and writes the bootloader, partition table, and application. Stored settings are cleared.
+          bambutton.bin is the application image for the device page. That update keeps stored settings.
+          EOF
+          pre=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            pre+=(--prerelease)
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber "$package"
+            body="$(gh release view "$TAG" --json body --jq .body)"
+            if [[ -z "${body//[[:space:]]/}" ]]; then
+              gh release edit "$TAG" --notes-file "$notes"
+            fi
+          else
+            gh release create "$TAG" --title "$TAG" "${pre[@]}" --notes-file "$notes" "$package"
+          fi

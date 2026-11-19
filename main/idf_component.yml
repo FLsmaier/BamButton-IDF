@@ -1,0 +1,3 @@
+dependencies:
+  # mDNS left the ESP-IDF tree in 5.x.
+  espressif/mdns: "^1.8.0"
