@@ -67,7 +67,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          app="build/bambutton.bin"
+          app="build/bambutton-idf.bin"
           test -s "$app"
           test -s build/merged-binary.bin
           test -s build/bootloader/bootloader.bin
@@ -83,10 +83,10 @@ jobs:
           cp build/bootloader/bootloader.bin "$stage/bootloader.bin"
           cp build/partition_table/partition-table.bin "$stage/partition-table.bin"
           cp build/ota_data_initial.bin "$stage/ota_data_initial.bin"
-          cp "$app" "$stage/bambutton.bin"
-          cp build/merged-binary.bin "$stage/bambutton-flash.bin"
+          cp "$app" "$stage/bambutton-idf.bin"
+          cp build/merged-binary.bin "$stage/bambutton-idf-flash.bin"
           mkdir -p dist
-          python3 - "$stage" "dist/bambutton-${VERSION}.zip" <<'PY'
+          python3 - "$stage" "dist/bambutton-idf-${VERSION}.zip" <<'PY'
           import os
           import sys
           import zipfile
@@ -98,8 +98,8 @@ jobs:
               "bootloader.bin",
               "partition-table.bin",
               "ota_data_initial.bin",
-              "bambutton.bin",
-              "bambutton-flash.bin",
+              "bambutton-idf.bin",
+              "bambutton-idf-flash.bin",
           ]
           with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
               for name in names:
@@ -120,15 +120,15 @@ jobs:
           TAG: ${{ github.ref_name }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          package="dist/bambutton-${VERSION}.zip"
+          package="dist/bambutton-idf-${VERSION}.zip"
           notes="$(mktemp)"
           cat > "$notes" <<EOF
           Firmware for the ESP32-C3 Super Mini, built with ESP-IDF 5.5.6.
 
-          bambutton-${VERSION}.zip unpacks to one directory. README-FLASH.md in that directory is the flash guide.
+          bambutton-idf-${VERSION}.zip unpacks to one directory. README-FLASH.md in that directory is the flash guide.
 
           ./flash.sh erases the chip and writes the bootloader, partition table, and application. Stored settings are cleared.
-          bambutton.bin is the application image for the device page. That update keeps stored settings.
+          bambutton-idf.bin is the application image for the device page. That update keeps stored settings.
           EOF
           pre=()
           if [[ "$PRERELEASE" == "true" ]]; then

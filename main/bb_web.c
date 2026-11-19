@@ -193,7 +193,7 @@ static esp_err_t begin_html(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_sendstr_chunk(req, "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
                                           "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-                                          "<title>BamButton</title><style>"
+                                          "<title>BamButton-IDF</title><style>"
                                           "body{font-family:sans-serif;margin:1.2rem;max-width:36rem;line-height:1.4}"
                                           "label{display:block;margin:.7rem 0}input,select{width:100%;box-sizing:border-box;padding:.45rem}"
                                           "input[type=checkbox]{width:auto}fieldset{margin:1rem 0}button{padding:.5rem .9rem;margin-right:.4rem}"
@@ -238,7 +238,7 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
 
     httpd_resp_set_status(req, status == 200 ? "200 OK" : "400 Bad Request");
     begin_html(req);
-    httpd_resp_sendstr_chunk(req, "<h1>BamButton</h1><p>Setup name <strong>");
+    httpd_resp_sendstr_chunk(req, "<h1>BamButton-IDF</h1><p>Setup name <strong>");
     html_text(req, bb_wifi_hostname());
     httpd_resp_sendstr_chunk(req, "</strong>. Address <strong>");
     html_text(req, current_ip[0] != '\0' ? current_ip : "none");
@@ -301,7 +301,7 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
     httpd_resp_sendstr_chunk(req, "</fieldset><button type=\"submit\">Save and restart</button></form>");
     httpd_resp_sendstr_chunk(req, "<fieldset><legend>Firmware</legend><p>Running version ");
     html_text(req, app->version);
-    httpd_resp_sendstr_chunk(req, ". Upload <code>build/bambutton.bin</code>.</p>"
+    httpd_resp_sendstr_chunk(req, ". Upload <code>build/bambutton-idf.bin</code>.</p>"
                                   "<form method=\"post\" action=\"/api/ota\" enctype=\"multipart/form-data\">"
                                   "<label><input type=\"checkbox\" name=\"force\" value=\"1\"> Force update</label>"
                                   "<label>Firmware file <input type=\"file\" name=\"firmware\" accept=\".bin\" required></label>"
@@ -613,7 +613,7 @@ static esp_err_t debug_get(httpd_req_t *req)
     const esp_partition_t *running = esp_ota_get_running_partition();
 
     begin_html(req);
-    httpd_resp_sendstr_chunk(req, "<h1>BamButton debug</h1><ul>");
+    httpd_resp_sendstr_chunk(req, "<h1>BamButton-IDF debug</h1><ul>");
     httpd_resp_sendstr_chunk(req, "<li>Mode: ");
     if (bb_wifi_sta_connected() && bb_wifi_ap_active()) {
         httpd_resp_sendstr_chunk(req, "station and access point");

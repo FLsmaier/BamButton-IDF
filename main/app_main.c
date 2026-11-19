@@ -128,7 +128,7 @@ static void log_row(const char *label, const char *value)
 static void log_config(const bb_config_t *cfg)
 {
     char text[16];
-    printf("\n-------- BamButton --------\n");
+    printf("\n-------- BamButton-IDF --------\n");
     snprintf(text, sizeof(text), "GPIO %u", cfg->led_gpio);
     log_row("LED", text);
     snprintf(text, sizeof(text), "GPIO %u", cfg->button_gpio);
@@ -152,7 +152,7 @@ static void log_config(const bb_config_t *cfg)
     } else {
         log_row("Printer", "not set");
     }
-    printf("---------------------------\n\n");
+    printf("-------------------------------\n\n");
     fflush(stdout);
 }
 

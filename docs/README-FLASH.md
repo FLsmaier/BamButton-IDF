@@ -1,4 +1,4 @@
-# Flashing BamButton
+# Flashing BamButton-IDF
 
 The board is an ESP32-C3 Super Mini with 4 MB of flash. The console is the USB serial/JTAG port, usually `/dev/ttyACM0`. Nothing else should have that port open while flashing.
 
@@ -10,8 +10,8 @@ The release zip is flat. Every file sits in the same directory:
 - `bootloader.bin` at `0x0`
 - `partition-table.bin` at `0x8000`
 - `ota_data_initial.bin` at `0xd000`
-- `bambutton.bin` at `0x10000`, also the file to upload on the device page
-- `bambutton-flash.bin`, the same images merged into one file for offset `0x0`
+- `bambutton-idf.bin` at `0x10000`, also the file to upload on the device page
+- `bambutton-idf-flash.bin`, the same images merged into one file for offset `0x0`
 
 A build in this repository writes those images under `build/`. `./docs/flash.sh` finds them there.
 
@@ -25,7 +25,7 @@ A build in this repository writes those images under `build/`. `./docs/flash.sh`
 | ota_0     | `0x10000` | 1984 KB |
 | ota_1     | `0x200000` | 1984 KB |
 
-`flash.sh` erases the chip first, so stored settings are cleared. Uploading `bambutton.bin` on the device page writes only the application and keeps those settings.
+`flash.sh` erases the chip first, so stored settings are cleared. Uploading `bambutton-idf.bin` on the device page writes only the application and keeps those settings.
 
 ## esptool
 
@@ -55,7 +55,7 @@ esptool --chip esp32c3 --port /dev/ttyACM0 --baud 460800 \
     0x0 bootloader.bin \
     0x8000 partition-table.bin \
     0xd000 ota_data_initial.bin \
-    0x10000 bambutton.bin
+    0x10000 bambutton-idf.bin
 ```
 
 Or write the merged image alone:
@@ -63,7 +63,7 @@ Or write the merged image alone:
 ```bash
 esptool --chip esp32c3 --port /dev/ttyACM0 --baud 460800 \
     write-flash --flash-mode dio --flash-freq 80m --flash-size 4MB \
-    0x0 bambutton-flash.bin
+    0x0 bambutton-idf-flash.bin
 ```
 
 ## Ports

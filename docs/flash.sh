@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Flash a BamButton ESP32-C3. Pass the serial port, or use /dev/ttyACM0.
+# Flash a BamButton-IDF ESP32-C3. Pass the serial port, or use /dev/ttyACM0.
 TTY_DEV=${1:-/dev/ttyACM0}
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -8,13 +8,13 @@ if [[ -f "$here/bootloader.bin" ]]; then
     bootloader="$here/bootloader.bin"
     partition="$here/partition-table.bin"
     otadata="$here/ota_data_initial.bin"
-    app="$here/bambutton.bin"
+    app="$here/bambutton-idf.bin"
 else
     root="$(cd "$here/.." && pwd)"
     bootloader="$root/build/bootloader/bootloader.bin"
     partition="$root/build/partition_table/partition-table.bin"
     otadata="$root/build/ota_data_initial.bin"
-    app="$root/build/bambutton.bin"
+    app="$root/build/bambutton-idf.bin"
 fi
 
 for image in "$bootloader" "$partition" "$otadata" "$app"; do
