@@ -27,6 +27,10 @@ static bool s_needs_reconcile;
 static bool s_chamber = true;
 static int64_t s_retry_at;
 static int64_t s_next_poll;
+static unsigned s_clear_attempt;
+
+/* Gap after a clear that failed or was not confirmed by printer status. */
+#define BB_CLEAR_RETRY_US (2LL * 1000 * 1000)
 
 static void runtime_status(bb_runtime_status_t *out)
 {
@@ -52,7 +56,7 @@ static void apply_status(const bb_printer_status_t *status)
 
 static void schedule_retry(void)
 {
-    s_retry_at = esp_timer_get_time() + 5LL * 1000 * 1000;
+    s_retry_at = esp_timer_get_time() + BB_CLEAR_RETRY_US;
 }
 
 static void handle_pending(const bb_config_t *cfg)
@@ -68,26 +72,39 @@ static void handle_pending(const bb_config_t *cfg)
         apply_status(&status);
         s_needs_reconcile = false;
         if (!s_pending) {
+            s_clear_attempt = 0;
             return;
         }
     }
 
+    s_clear_attempt++;
     if (bb_api_clear_plate(cfg, err, sizeof(err)) == ESP_OK) {
-        ESP_LOGI(TAG, "Plate clear accepted");
-        s_pending = false;
-        s_awaiting = false;
-        s_needs_reconcile = false;
-        s_retry_at = 0;
-        s_next_poll = esp_timer_get_time();
+        bb_printer_status_t status = {0};
+        if (bb_api_get_status(cfg, &status, err, sizeof(err)) == ESP_OK) {
+            apply_status(&status);
+            if (!s_pending) {
+                ESP_LOGI(TAG, "Plate clear confirmed on attempt %u", s_clear_attempt);
+                s_clear_attempt = 0;
+                s_next_poll = esp_timer_get_time();
+                return;
+            }
+            ESP_LOGW(TAG, "Plate clear attempt %u left the printer awaiting clear", s_clear_attempt);
+            schedule_retry();
+            return;
+        }
+        ESP_LOGW(TAG, "Plate clear attempt %u was accepted, status unread: %s", s_clear_attempt, err);
+        s_needs_reconcile = true;
+        schedule_retry();
         return;
     }
 
-    ESP_LOGW(TAG, "Plate clear was not applied: %s", err);
+    ESP_LOGW(TAG, "Plate clear attempt %u failed: %s", s_clear_attempt, err);
     bb_printer_status_t status = {0};
     if (bb_api_get_status(cfg, &status, err, sizeof(err)) == ESP_OK) {
         apply_status(&status);
         if (!s_pending) {
-            ESP_LOGI(TAG, "Plate clear confirmed by printer status");
+            ESP_LOGI(TAG, "Plate clear confirmed by printer status on attempt %u", s_clear_attempt);
+            s_clear_attempt = 0;
             return;
         }
         schedule_retry();
@@ -207,6 +224,7 @@ void app_main(void)
                 s_awaiting = false;
                 s_pending = true;
                 s_needs_reconcile = false;
+                s_clear_attempt = 0;
                 s_retry_at = 0;
             }
             last_press_us = now_us;

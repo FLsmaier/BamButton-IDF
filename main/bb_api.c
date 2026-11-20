@@ -10,10 +10,13 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 static const char *TAG = "bb.api";
 #define BB_API_BODY_CAP 8192
 #define BB_API_TIMEOUT_MS 5000
+#define BB_API_ATTEMPTS 3
+#define BB_API_RETRY_MS 500
 
 static SemaphoreHandle_t s_lock;
 
@@ -87,7 +90,6 @@ static esp_err_t api_request(const bb_config_t *cfg,
         .len = 0,
         .overflow = false,
     };
-    body[0] = '\0';
 
     esp_http_client_config_t http = {
         .url = url,
@@ -102,22 +104,38 @@ static esp_err_t api_request(const bb_config_t *cfg,
         http.crt_bundle_attach = esp_crt_bundle_attach;
     }
 
-    esp_http_client_handle_t client = esp_http_client_init(&http);
-    if (client == NULL) {
-        xSemaphoreGive(s_lock);
-        set_err(err, err_len, "HTTP client init failed");
-        return ESP_ERR_NO_MEM;
-    }
-    esp_http_client_set_header(client, "X-API-Key", cfg->api_key);
-    esp_http_client_set_header(client, "Accept", "application/json");
-    if (post) {
-        esp_http_client_set_header(client, "Content-Type", "application/json");
-        esp_http_client_set_post_field(client, "", 0);
-    }
+    esp_err_t err_code = ESP_FAIL;
+    int status = 0;
+    for (int attempt = 1; attempt <= BB_API_ATTEMPTS; attempt++) {
+        collected.len = 0;
+        collected.overflow = false;
+        body[0] = '\0';
 
-    esp_err_t err_code = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
+        esp_http_client_handle_t client = esp_http_client_init(&http);
+        if (client == NULL) {
+            xSemaphoreGive(s_lock);
+            set_err(err, err_len, "HTTP client init failed");
+            return ESP_ERR_NO_MEM;
+        }
+        esp_http_client_set_header(client, "X-API-Key", cfg->api_key);
+        esp_http_client_set_header(client, "Accept", "application/json");
+        if (post) {
+            esp_http_client_set_header(client, "Content-Type", "application/json");
+            esp_http_client_set_post_field(client, "", 0);
+        }
+
+        err_code = esp_http_client_perform(client);
+        status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+
+        const bool transport_failed = err_code != ESP_OK || status >= 500;
+        if (!transport_failed || collected.overflow || attempt == BB_API_ATTEMPTS) {
+            break;
+        }
+        ESP_LOGW(TAG, "%s %s attempt %d/%d failed: %s", post ? "POST" : "GET", path, attempt, BB_API_ATTEMPTS,
+                 err_code != ESP_OK ? esp_err_to_name(err_code) : "server error");
+        vTaskDelay(pdMS_TO_TICKS(BB_API_RETRY_MS));
+    }
     xSemaphoreGive(s_lock);
 
     if (status_out != NULL) {

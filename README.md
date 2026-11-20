@@ -1,6 +1,6 @@
 # BamButton-IDF
 
-BamButton-IDF is firmware for an ESP32-C3 Super Mini that clears a Bambu Lab printer plate from a button. It polls Bambuddy, flashes the button LED while the printer is waiting for the plate to be cleared, and sends the clear when the button is pressed.
+BamButton-IDF is firmware for an ESP32-C3 Super Mini that clears a Bambu Lab printer plate from a button. It polls Bambuddy, flashes the button LED while the printer is waiting for the plate to be cleared, and sends the clear when the button is pressed. A failed clear, or one the printer still reports as waiting, is sent again every 2 seconds once the station is associated. The board keeps trying until the printer status shows the plate is cleared.
 
 This is a port of [Bambutton](https://github.com/EdwardChamberlain/Bambutton). The original project is described on the [Bambuddy wiki](https://wiki.bambuddy.cool/community/bambutton/). The button calls the [Bambuddy API](https://wiki.bambuddy.cool/reference/api/#media-token): it reads printer status and posts the plate-clear with the stored API key.
 
@@ -29,7 +29,7 @@ stateDiagram-v2
 
 If the stored network cannot be joined, the access point stays on. After a successful join it stays on for 60 seconds, which leaves time to finish a change from a phone on the setup network, and then it turns off. The page stays available on the station address and at `bambutton-376764.local`. If the station later drops, the access point comes back, and the 60 seconds start again on the next join.
 
-The same name is the DHCP and mDNS hostname. The station uses DHCP unless the network section sets a static IP, netmask, gateway, and optional DNS. While the access point is up it is at `192.168.4.1`. Factory reset on the page erases the stored settings and restarts into the setup access point.
+The same name is the DHCP and mDNS hostname. The station uses DHCP unless the network section sets a static IP, netmask, gateway, and optional DNS. While the access point is up it is at `192.168.4.1`, and the page shows the station SSID, address, netmask, and signal once that join succeeds. Apply network stores the station settings and joins immediately, without a restart, so the setup page stays open and printers can be loaded from it. Save and restart still stores the whole page and reboots. Factory reset on the page erases the stored settings and restarts into the setup access point.
 
 The LED defaults to GPIO3 and the button to GPIO4, the same ports as Bambutton. Leave the dropdowns alone to keep those. The page only lists the safe header pins: GPIO 0, 1, 3, 4, 5, 6, 7, 10, 20, and 21. GPIO 2, 8, and 9 are strapping pins: GPIO 9 is the BOOT button, GPIO 8 drives the onboard LED and must stay high to enter download mode, and GPIO 2 should stay high at reset. GPIO 11-17 are the in-package flash and GPIO 18-19 are USB, and none of those are on the header. GPIO 20 and 21 are UART0; the console on this board is USB, so they can be used after boot. Saving a pin change stores it and restarts the board.
 

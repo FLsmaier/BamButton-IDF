@@ -194,10 +194,42 @@ static esp_err_t begin_html(httpd_req_t *req)
     return httpd_resp_sendstr_chunk(req, "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\">"
                                           "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                                           "<title>BamButton-IDF</title><style>"
-                                          "body{font-family:sans-serif;margin:1.2rem;max-width:36rem;line-height:1.4}"
-                                          "label{display:block;margin:.7rem 0}input,select{width:100%;box-sizing:border-box;padding:.45rem}"
-                                          "input[type=checkbox]{width:auto}fieldset{margin:1rem 0}button{padding:.5rem .9rem;margin-right:.4rem}"
-                                          ".message{background:#eef;padding:.6rem}</style></head><body>");
+                                          "html{color-scheme:light;background:#f4f4f5;color:#18181b}"
+                                          "body{font-family:system-ui,sans-serif;max-width:40rem;margin:0 auto;"
+                                          "padding:1.1rem 1.2rem 2.2rem;line-height:1.45}"
+                                          "h1{font-size:1.35rem;margin:0 0 .85rem}"
+                                          ".status{display:grid;grid-template-columns:1fr 1fr;"
+                                          "gap:.5rem;margin:0 0 .7rem}"
+                                          ".status div{background:#fff;border:1px solid #e4e4e7;border-radius:.55rem;"
+                                          "padding:.5rem .7rem;min-width:0}"
+                                          ".status span{display:block;color:#71717a;font-size:.68rem;font-weight:600;"
+                                          "letter-spacing:.04em;text-transform:uppercase}"
+                                          ".status strong{display:block;margin-top:.12rem;font-size:.95rem;font-weight:600;"
+                                          "overflow-wrap:anywhere}"
+                                          ".status em{display:block;margin-top:.15rem;font-style:normal;font-size:.82rem;"
+                                          "font-weight:500;color:#3f3f46}.status em:empty{display:none}"
+                                          ".note{margin:.1rem 0 .9rem;color:#52525b;font-size:.9rem}.note:empty{display:none}"
+                                          "fieldset{background:#fff;border:1px solid #e4e4e7;border-radius:.6rem;"
+                                          "margin:0 0 .75rem;padding:.3rem .9rem .85rem}"
+                                          "fieldset hr{border:0;border-top:1px solid #e4e4e7;margin:.9rem 0 .2rem}"
+                                          "legend{font-weight:600;padding:0 .25rem}"
+                                          "label{display:block;margin:.6rem 0;font-size:.9rem}"
+                                          "input,select{display:block;width:100%;box-sizing:border-box;margin-top:.28rem;"
+                                          "padding:.48rem .6rem;border:1px solid #d4d4d8;border-radius:.4rem;"
+                                          "background:#fff;color:#18181b;font:inherit}"
+                                          "label.check{display:flex;align-items:center;gap:.45rem}"
+                                          "label.check input{width:auto;margin:0;padding:0}"
+                                          ".row{display:grid;grid-template-columns:1fr 1fr;gap:0 .75rem}"
+                                          "@media(max-width:34rem){.row{grid-template-columns:1fr}}"
+                                          "button{font:inherit;padding:.5rem .85rem;border:0;border-radius:.4rem;"
+                                          "background:#18181b;color:#fff;margin:.15rem .35rem .15rem 0}"
+                                          "button.ghost{background:#fff;color:#18181b;border:1px solid #d4d4d8}"
+                                          "button.danger{background:#b91c1c}"
+                                          ".hint{color:#3f3f46;font-size:.9rem}"
+                                          ".message{background:#e0e7ff;border-radius:.45rem;padding:.6rem .75rem}"
+                                          "fieldset p{margin:.35rem 0 .7rem;color:#3f3f46}"
+                                          "a{color:#1d4ed8}ul{padding-left:1.15rem}li{margin:.28rem 0}"
+                                          "</style></head><body>");
 }
 
 static esp_err_t end_html(httpd_req_t *req)
@@ -229,29 +261,58 @@ static void send_gpio_select(httpd_req_t *req, const char *label, const char *na
 
 static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const char *message, int status)
 {
-    char current_ip[16];
+    char station_ssid[33];
+    char station_ip[16];
+    char station_mask[16];
     char printer[16];
     const esp_app_desc_t *app = esp_app_get_description();
 
-    bb_wifi_get_ip(current_ip, sizeof(current_ip));
+    bb_wifi_get_station(station_ssid, sizeof(station_ssid), station_ip, sizeof(station_ip), station_mask,
+                        sizeof(station_mask));
+    const bool station_up = bb_wifi_sta_connected() && station_ssid[0] != '\0';
+    char signal[32];
+    const bool have_signal = station_up && bb_wifi_format_signal(signal, sizeof(signal));
     snprintf(printer, sizeof(printer), "%d", (int)cfg->printer_id);
 
     httpd_resp_set_status(req, status == 200 ? "200 OK" : "400 Bad Request");
     begin_html(req);
-    httpd_resp_sendstr_chunk(req, "<h1>BamButton-IDF</h1><p>Setup name <strong>");
+    httpd_resp_sendstr_chunk(req, "<h1>BamButton-IDF</h1><section class=\"status\"><div><span>Setup</span><strong>");
     html_text(req, bb_wifi_hostname());
-    httpd_resp_sendstr_chunk(req, "</strong>. Address <strong>");
-    html_text(req, current_ip[0] != '\0' ? current_ip : "none");
-    httpd_resp_sendstr_chunk(req, "</strong>. ");
-    if (bb_wifi_ap_active()) {
-        httpd_resp_sendstr_chunk(req, "Setup access point is on at 192.168.4.1. ");
-    }
-    if (bb_wifi_sta_connected() && bb_wifi_ap_active()) {
-        httpd_resp_sendstr_chunk(req, "Joined the stored Wi-Fi network. The access point turns off after 60 seconds.");
-    } else if (bb_wifi_sta_connected()) {
-        httpd_resp_sendstr_chunk(req, "Joined the stored Wi-Fi network.");
+    httpd_resp_sendstr_chunk(req, "</strong></div><div><span>Station</span><strong id=\"sta-ssid\">");
+    if (station_up) {
+        html_text(req, station_ssid);
     } else {
-        httpd_resp_sendstr_chunk(req, "Stored Wi-Fi network is not joined.");
+        httpd_resp_sendstr_chunk(req, "Not joined");
+    }
+    httpd_resp_sendstr_chunk(req, "</strong><em id=\"sta-signal\">");
+    if (have_signal) {
+        html_text(req, signal);
+    }
+    httpd_resp_sendstr_chunk(req, "</em></div><div id=\"sta-ip-cell\"");
+    if (!station_up) {
+        httpd_resp_sendstr_chunk(req, " hidden");
+    }
+    httpd_resp_sendstr_chunk(req, "><span>Address</span><strong id=\"sta-ip\">");
+    if (station_up && station_ip[0] != '\0') {
+        html_text(req, station_ip);
+    } else {
+        httpd_resp_sendstr_chunk(req, "&mdash;");
+    }
+    httpd_resp_sendstr_chunk(req, "</strong></div><div id=\"sta-mask-cell\"");
+    if (!station_up) {
+        httpd_resp_sendstr_chunk(req, " hidden");
+    }
+    httpd_resp_sendstr_chunk(req, "><span>Netmask</span><strong id=\"sta-mask\">");
+    if (station_up && station_mask[0] != '\0') {
+        html_text(req, station_mask);
+    } else {
+        httpd_resp_sendstr_chunk(req, "&mdash;");
+    }
+    httpd_resp_sendstr_chunk(req, "</strong></div></section><p class=\"note\" id=\"ap-note\">");
+    if (bb_wifi_ap_active() && station_up) {
+        httpd_resp_sendstr_chunk(req, "Setup access point is on at 192.168.4.1. It turns off 60 seconds after the station stays joined.");
+    } else if (bb_wifi_ap_active()) {
+        httpd_resp_sendstr_chunk(req, "Setup access point is on at 192.168.4.1.");
     }
     httpd_resp_sendstr_chunk(req, "</p>");
     if (message != NULL && message[0] != '\0') {
@@ -264,23 +325,24 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
     html_text(req, cfg->wifi_ssid);
     httpd_resp_sendstr_chunk(req, "\"></label><label>Wi-Fi password <input type=\"password\" name=\"wifi_password\" "
                                   "autocomplete=\"new-password\" placeholder=\"Leave blank to keep current\"></label>"
-                                  "<label><input type=\"checkbox\" name=\"use_dhcp\" value=\"1\"");
+                                  "<label class=\"check\"><input type=\"checkbox\" name=\"use_dhcp\" value=\"1\"");
     if (cfg->use_dhcp) {
         httpd_resp_sendstr_chunk(req, " checked");
     }
-    httpd_resp_sendstr_chunk(req, "> Use DHCP</label><label>IP address <input name=\"ip\" value=\"");
+    httpd_resp_sendstr_chunk(req, "> Use DHCP</label><div class=\"row\"><label>IP address <input name=\"ip\" value=\"");
     html_text(req, cfg->ip);
     httpd_resp_sendstr_chunk(req, "\"></label><label>Netmask <input name=\"netmask\" value=\"");
     html_text(req, cfg->netmask);
-    httpd_resp_sendstr_chunk(req, "\"></label><label>Gateway <input name=\"gateway\" value=\"");
+    httpd_resp_sendstr_chunk(req, "\"></label></div><div class=\"row\"><label>Gateway <input name=\"gateway\" value=\"");
     html_text(req, cfg->gateway);
     httpd_resp_sendstr_chunk(req, "\"></label><label>DNS <input name=\"dns\" value=\"");
     html_text(req, cfg->dns);
-    httpd_resp_sendstr_chunk(req, "\" placeholder=\"Defaults to the gateway\"></label>"
-                                  "</fieldset><fieldset><legend>Bambuddy</legend><label>Endpoint <input name=\"endpoint\" value=\"");
+    httpd_resp_sendstr_chunk(req, "\" placeholder=\"Defaults to the gateway\"></label></div>"
+                                  "<button type=\"button\" id=\"apply-network\">Apply network</button> "
+                                  "<span class=\"hint\" id=\"network-status\"></span></fieldset><fieldset><legend>Bambuddy</legend><label>Endpoint <input name=\"endpoint\" value=\"");
     html_text(req, cfg->endpoint);
     httpd_resp_sendstr_chunk(req, "\"></label><label>API key <input type=\"password\" name=\"api_key\" autocomplete=\"new-password\" "
-                                  "placeholder=\"Leave blank to keep current\"></label><label><input type=\"checkbox\" name=\"ignore_ssl\" value=\"1\"");
+                                  "placeholder=\"Leave blank to keep current\"></label><label class=\"check\"><input type=\"checkbox\" name=\"ignore_ssl\" value=\"1\"");
     if (cfg->ignore_ssl) {
         httpd_resp_sendstr_chunk(req, " checked");
     }
@@ -293,24 +355,23 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
         httpd_resp_sendstr_chunk(req, printer);
         httpd_resp_sendstr_chunk(req, ")</option>");
     }
-    httpd_resp_sendstr_chunk(req, "</select></label><button type=\"button\" id=\"load-printers\">Load printers from Bambuddy</button> "
-                                  "<span id=\"printer-status\"></span></fieldset>");
-    httpd_resp_sendstr_chunk(req, "<fieldset><legend>Pins</legend>");
+    httpd_resp_sendstr_chunk(req, "</select></label><button type=\"button\" class=\"ghost\" id=\"load-printers\">Load printers from Bambuddy</button> "
+                                  "<span class=\"hint\" id=\"printer-status\"></span><hr><div class=\"row\">");
     send_gpio_select(req, "LED", "led_gpio", cfg->led_gpio, BB_LED_GPIO_DEFAULT);
     send_gpio_select(req, "Button", "button_gpio", cfg->button_gpio, BB_BUTTON_GPIO_DEFAULT);
-    httpd_resp_sendstr_chunk(req, "</fieldset><button type=\"submit\">Save and restart</button></form>");
+    httpd_resp_sendstr_chunk(req, "</div><button type=\"submit\">Save and restart</button></fieldset></form>");
     httpd_resp_sendstr_chunk(req, "<fieldset><legend>Firmware</legend><p>Running version ");
     html_text(req, app->version);
     httpd_resp_sendstr_chunk(req, ". Upload <code>build/bambutton-idf.bin</code>.</p>"
                                   "<form method=\"post\" action=\"/api/ota\" enctype=\"multipart/form-data\">"
-                                  "<label><input type=\"checkbox\" name=\"force\" value=\"1\"> Force update</label>"
+                                  "<label class=\"check\"><input type=\"checkbox\" name=\"force\" value=\"1\"> Force update</label>"
                                   "<label>Firmware file <input type=\"file\" name=\"firmware\" accept=\".bin\" required></label>"
                                   "<button type=\"submit\">Upload and restart</button></form></fieldset>"
                                   "<fieldset><legend>Factory reset</legend>"
                                   "<p>Erases every stored setting and restarts into the setup access point.</p>"
                                   "<form method=\"post\" action=\"/factory-reset\">"
-                                  "<label><input type=\"checkbox\" name=\"confirm\" value=\"1\"> Erase all settings</label>"
-                                  "<button type=\"submit\">Factory reset and restart</button></form></fieldset>"
+                                  "<label class=\"check\"><input type=\"checkbox\" name=\"confirm\" value=\"1\"> Erase all settings</label>"
+                                  "<button type=\"submit\" class=\"danger\">Factory reset and restart</button></form></fieldset>"
                                   "<p><a href=\"/debug\">Debug</a></p><script>"
                                   "const select=document.getElementById('printer_id');"
                                   "const status=document.getElementById('printer-status');"
@@ -330,6 +391,33 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
                                   "if(!found&&current!=='0'){const option=document.createElement('option');option.value=current;option.selected=true;"
                                   "option.textContent='Current printer ('+current+', not returned)';select.insertBefore(option,select.firstChild);}"
                                   "status.textContent=' Loaded.';}catch(error){status.textContent=' '+error.message;}});"
+                                  "const netStatus=document.getElementById('network-status');"
+                                  "const staSsid=document.getElementById('sta-ssid');"
+                                  "const staSignal=document.getElementById('sta-signal');"
+                                  "const staIp=document.getElementById('sta-ip');"
+                                  "const staMask=document.getElementById('sta-mask');"
+                                  "const staIpCell=document.getElementById('sta-ip-cell');"
+                                  "const staMaskCell=document.getElementById('sta-mask-cell');"
+                                  "const apNote=document.getElementById('ap-note');"
+                                  "document.getElementById('apply-network').addEventListener('click',async()=>{"
+                                  "netStatus.textContent=' Joining...';"
+                                  "try{const body=new URLSearchParams();"
+                                  "body.set('wifi_ssid',document.querySelector('[name=wifi_ssid]').value);"
+                                  "const password=document.querySelector('[name=wifi_password]').value;"
+                                  "if(password)body.set('wifi_password',password);"
+                                  "if(document.querySelector('[name=use_dhcp]').checked)body.set('use_dhcp','1');"
+                                  "body.set('ip',document.querySelector('[name=ip]').value);"
+                                  "body.set('netmask',document.querySelector('[name=netmask]').value);"
+                                  "body.set('gateway',document.querySelector('[name=gateway]').value);"
+                                  "body.set('dns',document.querySelector('[name=dns]').value);"
+                                  "const response=await fetch('/apply-network',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});"
+                                  "const data=await response.json();"
+                                  "if(!response.ok)throw new Error(data.error||'Network was not applied');"
+                                  "netStatus.textContent=' '+data.message;"
+                                  "if(data.joined){staSsid.textContent=data.ssid;staSignal.textContent=data.signal||'';staIp.textContent=data.ip;staMask.textContent=data.netmask;staIpCell.hidden=false;staMaskCell.hidden=false;}"
+                                  "else{staSsid.textContent='Not joined';staSignal.textContent='';staIpCell.hidden=true;staMaskCell.hidden=true;}"
+                                  "if(data.ap)apNote.textContent=data.joined?'Setup access point is on at 192.168.4.1. It turns off 60 seconds after the station stays joined.':'Setup access point is on at 192.168.4.1.';"
+                                  "}catch(error){netStatus.textContent=' '+error.message;}});"
                                   "</script></body></html>");
     end_html(req);
 }
@@ -488,6 +576,105 @@ static esp_err_t save_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+static void send_json_error(httpd_req_t *req, int status, const char *message);
+
+static esp_err_t apply_network_post(httpd_req_t *req)
+{
+    char body[1024];
+    if (!read_small_body(req, body, sizeof(body))) {
+        return ESP_OK;
+    }
+    char ssid[BB_SSID_CAP];
+    char password[BB_PASSWORD_CAP];
+    char dhcp_text[8];
+    char ip[BB_IPV4_CAP];
+    char netmask[BB_IPV4_CAP];
+    char gateway[BB_IPV4_CAP];
+    char dns[BB_IPV4_CAP];
+    char err[128];
+    form_status_t ssid_status = form_value(body, "wifi_ssid", ssid, sizeof(ssid));
+    form_status_t password_status = form_value(body, "wifi_password", password, sizeof(password));
+    form_status_t dhcp_status = form_value(body, "use_dhcp", dhcp_text, sizeof(dhcp_text));
+    form_status_t ip_status = form_value(body, "ip", ip, sizeof(ip));
+    form_status_t mask_status = form_value(body, "netmask", netmask, sizeof(netmask));
+    form_status_t gateway_status = form_value(body, "gateway", gateway, sizeof(gateway));
+    form_status_t dns_status = form_value(body, "dns", dns, sizeof(dns));
+    if (!field_fits(ssid_status, err, sizeof(err), "Wi-Fi SSID is too long") ||
+        !field_fits(password_status, err, sizeof(err), "Wi-Fi password is too long") ||
+        !field_fits(dhcp_status, err, sizeof(err), "A form field is too long") ||
+        !field_fits(ip_status, err, sizeof(err), "IP address is too long") ||
+        !field_fits(mask_status, err, sizeof(err), "Netmask is too long") ||
+        !field_fits(gateway_status, err, sizeof(err), "Gateway is too long") ||
+        !field_fits(dns_status, err, sizeof(err), "DNS is too long")) {
+        send_json_error(req, 400, err);
+        return ESP_OK;
+    }
+    if (ssid[0] == '\0') {
+        send_json_error(req, 400, "Wi-Fi SSID is required");
+        return ESP_OK;
+    }
+
+    bool password_set = password_status == FORM_OK && password[0] != '\0';
+    bool use_dhcp = dhcp_status == FORM_OK;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    bb_config_t updated = *s_cfg;
+    bool ok = bb_config_update(&updated, ssid, password, password_set, updated.endpoint, updated.api_key, false,
+                               updated.ignore_ssl, use_dhcp, ip, netmask, gateway, dns, updated.printer_id,
+                               updated.led_gpio, updated.button_gpio, err, sizeof(err));
+    if (ok) {
+        esp_err_t saved = bb_nvs_save(&updated);
+        if (saved != ESP_OK) {
+            snprintf(err, sizeof(err), "Could not store settings (%s)", esp_err_to_name(saved));
+            ok = false;
+        } else {
+            *s_cfg = updated;
+        }
+    }
+    xSemaphoreGive(s_lock);
+    if (!ok) {
+        send_json_error(req, 400, err);
+        return ESP_OK;
+    }
+
+    bool joined = false;
+    esp_err_t applied = bb_wifi_apply_station(&updated, &joined);
+    char station_ssid[33] = "";
+    char station_ip[16] = "";
+    char station_mask[16] = "";
+    char signal[32] = "";
+    if (joined) {
+        bb_wifi_get_station(station_ssid, sizeof(station_ssid), station_ip, sizeof(station_ip), station_mask,
+                            sizeof(station_mask));
+        bb_wifi_format_signal(signal, sizeof(signal));
+    }
+    const char *message = "Joined the station.";
+    if (applied != ESP_OK) {
+        message = "Saved, but the station could not be started.";
+    } else if (!joined) {
+        message = "Saved. The station has not joined yet. The board will keep trying.";
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        send_json_error(req, 502, "Out of memory");
+        return ESP_OK;
+    }
+    cJSON_AddBoolToObject(root, "joined", joined);
+    cJSON_AddBoolToObject(root, "ap", bb_wifi_ap_active());
+    cJSON_AddStringToObject(root, "message", message);
+    cJSON_AddStringToObject(root, "ssid", station_ssid);
+    cJSON_AddStringToObject(root, "ip", station_ip);
+    cJSON_AddStringToObject(root, "netmask", station_mask);
+    cJSON_AddStringToObject(root, "signal", signal);
+    char *printed = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, printed != NULL ? printed : "{\"joined\":false,\"message\":\"Request failed\"}");
+    free(printed);
+    return ESP_OK;
+}
+
 static void send_json_error(httpd_req_t *req, int status, const char *message)
 {
     cJSON *root = cJSON_CreateObject();
@@ -626,6 +813,9 @@ static esp_err_t debug_get(httpd_req_t *req)
     httpd_resp_sendstr_chunk(req, bb_wifi_sta_connected() ? "yes" : "no");
     httpd_resp_sendstr_chunk(req, "</li><li>IP address: ");
     html_text(req, ip[0] != '\0' ? ip : "none");
+    char signal[32];
+    httpd_resp_sendstr_chunk(req, "</li><li>Signal: ");
+    html_text(req, bb_wifi_format_signal(signal, sizeof(signal)) ? signal : "none");
     httpd_resp_sendstr_chunk(req, cfg.use_dhcp ? "</li><li>Station address: DHCP" : "</li><li>Station address: static");
     httpd_resp_sendstr_chunk(req, "</li><li>Hostname: ");
     html_text(req, bb_wifi_hostname());
@@ -1073,6 +1263,7 @@ esp_err_t bb_web_start(bb_config_t *cfg, bb_runtime_fn runtime)
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = root_get},
         {.uri = "/save", .method = HTTP_POST, .handler = save_post},
+        {.uri = "/apply-network", .method = HTTP_POST, .handler = apply_network_post},
         {.uri = "/api/printers", .method = HTTP_POST, .handler = printers_post},
         {.uri = "/api/ota", .method = HTTP_POST, .handler = ota_post},
         {.uri = "/factory-reset", .method = HTTP_POST, .handler = factory_reset_post},

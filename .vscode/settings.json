@@ -9,5 +9,6 @@
         "--query-driver=**",
         "--compile-commands-dir=${workspaceFolder}/build"
     ],
-    "idf.port": "/dev/ttyACM0"
+    "idf.port": "/dev/ttyACM0",
+    "idf.currentSetup": "/home/stefan/.espressif/v5.5.6/esp-idf"
 }
