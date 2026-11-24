@@ -109,6 +109,7 @@ void bb_config_set_defaults(bb_config_t *cfg)
     memset(cfg, 0, sizeof(*cfg));
     cfg->version = BB_CONFIG_VERSION;
     cfg->use_dhcp = 1;
+    cfg->wifi_low_tx = 1;
     cfg->led_gpio = BB_LED_GPIO_DEFAULT;
     cfg->button_gpio = BB_BUTTON_GPIO_DEFAULT;
 }
@@ -309,6 +310,7 @@ bool bb_config_update(bb_config_t *cfg,
                       bool api_key_set,
                       bool ignore_ssl,
                       bool use_dhcp,
+                      bool wifi_low_tx,
                       const char *ip,
                       const char *netmask,
                       const char *gateway,
@@ -438,6 +440,7 @@ bool bb_config_update(bb_config_t *cfg,
     }
     cfg->ignore_ssl = ignore_ssl ? 1 : 0;
     cfg->use_dhcp = use_dhcp ? 1 : 0;
+    cfg->wifi_low_tx = wifi_low_tx ? 1 : 0;
     if (!copy_str(cfg->ip, sizeof(cfg->ip), ip_text) ||
         !copy_str(cfg->netmask, sizeof(cfg->netmask), mask_text) ||
         !copy_str(cfg->gateway, sizeof(cfg->gateway), gateway_text) ||

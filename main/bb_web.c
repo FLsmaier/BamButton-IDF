@@ -325,6 +325,12 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
     html_text(req, cfg->wifi_ssid);
     httpd_resp_sendstr_chunk(req, "\"></label><label>Wi-Fi password <input type=\"password\" name=\"wifi_password\" "
                                   "autocomplete=\"new-password\" placeholder=\"Leave blank to keep current\"></label>"
+                                  "<label class=\"check\"><input type=\"checkbox\" name=\"wifi_low_tx\" value=\"1\"");
+    if (cfg->wifi_low_tx) {
+        httpd_resp_sendstr_chunk(req, " checked");
+    }
+    httpd_resp_sendstr_chunk(req, "> Limit transmit power to 8.5 dBm</label>"
+                                  "<p>Leave this on for the Super Mini. Turn it off for full power.</p>"
                                   "<label class=\"check\"><input type=\"checkbox\" name=\"use_dhcp\" value=\"1\"");
     if (cfg->use_dhcp) {
         httpd_resp_sendstr_chunk(req, " checked");
@@ -406,6 +412,7 @@ static void send_config_page(httpd_req_t *req, const bb_config_t *cfg, const cha
                                   "const password=document.querySelector('[name=wifi_password]').value;"
                                   "if(password)body.set('wifi_password',password);"
                                   "if(document.querySelector('[name=use_dhcp]').checked)body.set('use_dhcp','1');"
+                                  "if(document.querySelector('[name=wifi_low_tx]').checked)body.set('wifi_low_tx','1');"
                                   "body.set('ip',document.querySelector('[name=ip]').value);"
                                   "body.set('netmask',document.querySelector('[name=netmask]').value);"
                                   "body.set('gateway',document.querySelector('[name=gateway]').value);"
@@ -494,6 +501,7 @@ static esp_err_t save_post(httpd_req_t *req)
     char printer_text[16];
     char ignore_text[8];
     char dhcp_text[8];
+    char low_tx_text[8];
     char ip[BB_IPV4_CAP];
     char netmask[BB_IPV4_CAP];
     char gateway[BB_IPV4_CAP];
@@ -508,6 +516,7 @@ static esp_err_t save_post(httpd_req_t *req)
     form_status_t printer_status = form_value(body, "printer_id", printer_text, sizeof(printer_text));
     form_status_t ignore_status = form_value(body, "ignore_ssl", ignore_text, sizeof(ignore_text));
     form_status_t dhcp_status = form_value(body, "use_dhcp", dhcp_text, sizeof(dhcp_text));
+    form_status_t low_tx_status = form_value(body, "wifi_low_tx", low_tx_text, sizeof(low_tx_text));
     form_status_t ip_status = form_value(body, "ip", ip, sizeof(ip));
     form_status_t mask_status = form_value(body, "netmask", netmask, sizeof(netmask));
     form_status_t gateway_status = form_value(body, "gateway", gateway, sizeof(gateway));
@@ -521,6 +530,7 @@ static esp_err_t save_post(httpd_req_t *req)
         !field_fits(printer_status, err, sizeof(err), "Printer must be a positive number") ||
         !field_fits(ignore_status, err, sizeof(err), "A form field is too long") ||
         !field_fits(dhcp_status, err, sizeof(err), "A form field is too long") ||
+        !field_fits(low_tx_status, err, sizeof(err), "A form field is too long") ||
         !field_fits(ip_status, err, sizeof(err), "IP address is too long") ||
         !field_fits(mask_status, err, sizeof(err), "Netmask is too long") ||
         !field_fits(gateway_status, err, sizeof(err), "Gateway is too long") ||
@@ -536,6 +546,7 @@ static esp_err_t save_post(httpd_req_t *req)
     bool api_key_set = api_key_status == FORM_OK && api_key[0] != '\0';
     bool ignore_ssl = ignore_status == FORM_OK;
     bool use_dhcp = dhcp_status == FORM_OK;
+    bool wifi_low_tx = low_tx_status == FORM_OK;
 
     int32_t printer_id = 0;
     uint8_t led_gpio = 0;
@@ -552,8 +563,8 @@ static esp_err_t save_post(httpd_req_t *req)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     bb_config_t updated = *s_cfg;
     bool ok = bb_config_update(&updated, ssid, password, password_set, endpoint, api_key, api_key_set,
-                               ignore_ssl, use_dhcp, ip, netmask, gateway, dns, printer_id, led_gpio,
-                               button_gpio, err, sizeof(err));
+                               ignore_ssl, use_dhcp, wifi_low_tx, ip, netmask, gateway, dns, printer_id,
+                               led_gpio, button_gpio, err, sizeof(err));
     if (ok) {
         esp_err_t saved = bb_nvs_save(&updated);
         if (saved != ESP_OK) {
@@ -587,6 +598,7 @@ static esp_err_t apply_network_post(httpd_req_t *req)
     char ssid[BB_SSID_CAP];
     char password[BB_PASSWORD_CAP];
     char dhcp_text[8];
+    char low_tx_text[8];
     char ip[BB_IPV4_CAP];
     char netmask[BB_IPV4_CAP];
     char gateway[BB_IPV4_CAP];
@@ -595,6 +607,7 @@ static esp_err_t apply_network_post(httpd_req_t *req)
     form_status_t ssid_status = form_value(body, "wifi_ssid", ssid, sizeof(ssid));
     form_status_t password_status = form_value(body, "wifi_password", password, sizeof(password));
     form_status_t dhcp_status = form_value(body, "use_dhcp", dhcp_text, sizeof(dhcp_text));
+    form_status_t low_tx_status = form_value(body, "wifi_low_tx", low_tx_text, sizeof(low_tx_text));
     form_status_t ip_status = form_value(body, "ip", ip, sizeof(ip));
     form_status_t mask_status = form_value(body, "netmask", netmask, sizeof(netmask));
     form_status_t gateway_status = form_value(body, "gateway", gateway, sizeof(gateway));
@@ -602,6 +615,7 @@ static esp_err_t apply_network_post(httpd_req_t *req)
     if (!field_fits(ssid_status, err, sizeof(err), "Wi-Fi SSID is too long") ||
         !field_fits(password_status, err, sizeof(err), "Wi-Fi password is too long") ||
         !field_fits(dhcp_status, err, sizeof(err), "A form field is too long") ||
+        !field_fits(low_tx_status, err, sizeof(err), "A form field is too long") ||
         !field_fits(ip_status, err, sizeof(err), "IP address is too long") ||
         !field_fits(mask_status, err, sizeof(err), "Netmask is too long") ||
         !field_fits(gateway_status, err, sizeof(err), "Gateway is too long") ||
@@ -616,11 +630,12 @@ static esp_err_t apply_network_post(httpd_req_t *req)
 
     bool password_set = password_status == FORM_OK && password[0] != '\0';
     bool use_dhcp = dhcp_status == FORM_OK;
+    bool wifi_low_tx = low_tx_status == FORM_OK;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     bb_config_t updated = *s_cfg;
     bool ok = bb_config_update(&updated, ssid, password, password_set, updated.endpoint, updated.api_key, false,
-                               updated.ignore_ssl, use_dhcp, ip, netmask, gateway, dns, updated.printer_id,
-                               updated.led_gpio, updated.button_gpio, err, sizeof(err));
+                               updated.ignore_ssl, use_dhcp, wifi_low_tx, ip, netmask, gateway, dns,
+                               updated.printer_id, updated.led_gpio, updated.button_gpio, err, sizeof(err));
     if (ok) {
         esp_err_t saved = bb_nvs_save(&updated);
         if (saved != ESP_OK) {
@@ -817,6 +832,7 @@ static esp_err_t debug_get(httpd_req_t *req)
     httpd_resp_sendstr_chunk(req, "</li><li>Signal: ");
     html_text(req, bb_wifi_format_signal(signal, sizeof(signal)) ? signal : "none");
     httpd_resp_sendstr_chunk(req, cfg.use_dhcp ? "</li><li>Station address: DHCP" : "</li><li>Station address: static");
+    httpd_resp_sendstr_chunk(req, cfg.wifi_low_tx ? "</li><li>Wi-Fi power: 8.5 dBm" : "</li><li>Wi-Fi power: full");
     httpd_resp_sendstr_chunk(req, "</li><li>Hostname: ");
     html_text(req, bb_wifi_hostname());
     char line[96];

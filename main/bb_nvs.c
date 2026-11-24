@@ -67,7 +67,8 @@ esp_err_t bb_nvs_load(bb_config_t *cfg)
         ESP_LOGW(TAG, "nvs_get_blob failed: %s", esp_err_to_name(err));
         return err;
     }
-    if (size != sizeof(loaded) || (loaded.version != BB_CONFIG_VERSION && loaded.version != 2)) {
+    if (size != sizeof(loaded) ||
+        (loaded.version != 2 && loaded.version != 3 && loaded.version != BB_CONFIG_VERSION)) {
         ESP_LOGW(TAG, "Settings blob ignored (size %u version %u)", (unsigned)size,
                  (unsigned)loaded.version);
         return ESP_OK;
@@ -77,7 +78,6 @@ esp_err_t bb_nvs_load(bb_config_t *cfg)
     if (loaded.version == 2) {
         loaded.led_gpio = BB_LED_GPIO_DEFAULT;
         loaded.button_gpio = BB_BUTTON_GPIO_DEFAULT;
-        loaded.version = BB_CONFIG_VERSION;
         ESP_LOGI(TAG, "Settings from version 2; LED GPIO %u and button GPIO %u", loaded.led_gpio,
                  loaded.button_gpio);
     } else if (!bb_config_pins_valid(&loaded)) {
@@ -86,6 +86,14 @@ esp_err_t bb_nvs_load(bb_config_t *cfg)
         loaded.led_gpio = BB_LED_GPIO_DEFAULT;
         loaded.button_gpio = BB_BUTTON_GPIO_DEFAULT;
     }
+    if (loaded.version < 4) {
+        loaded.wifi_low_tx = 1;
+        ESP_LOGI(TAG, "Settings from version %u; Wi-Fi power capped at 8.5 dBm",
+                 (unsigned)loaded.version);
+    } else if (loaded.wifi_low_tx > 1) {
+        loaded.wifi_low_tx = 1;
+    }
+    loaded.version = BB_CONFIG_VERSION;
     *cfg = loaded;
     ESP_LOGI(TAG, "Loaded settings for SSID \"%s\"", cfg->wifi_ssid);
     return ESP_OK;

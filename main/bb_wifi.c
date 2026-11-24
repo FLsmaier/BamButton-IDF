@@ -22,6 +22,9 @@ static const char *TAG = "bb.wifi";
 #define BB_WIFI_ATTEMPT_MS 10000
 #define BB_WIFI_RETRY_US (30LL * 1000 * 1000)
 #define BB_AP_HOLD_US (60LL * 1000 * 1000)
+/* Quarter-dBm steps. 34 is 8.5 dBm. 84 is the API maximum, 20 dBm. */
+#define BB_WIFI_TX_POWER_LOW 34
+#define BB_WIFI_TX_POWER_FULL 84
 
 static EventGroupHandle_t s_events;
 static SemaphoreHandle_t s_lock;
@@ -421,6 +424,17 @@ static void apply_sta_address(const bb_config_t *cfg)
     ESP_LOGI(TAG, "Static station address %s", cfg->ip);
 }
 
+static void apply_tx_power(const bb_config_t *cfg)
+{
+    int8_t power = (cfg != NULL && cfg->wifi_low_tx) ? BB_WIFI_TX_POWER_LOW : BB_WIFI_TX_POWER_FULL;
+    esp_err_t err = esp_wifi_set_max_tx_power(power);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "TX power: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "TX power %s", power == BB_WIFI_TX_POWER_LOW ? "8.5 dBm" : "full");
+}
+
 esp_err_t bb_wifi_start(const bb_config_t *cfg)
 {
     if (cfg == NULL) {
@@ -469,6 +483,7 @@ esp_err_t bb_wifi_start(const bb_config_t *cfg)
         if (country != ESP_OK) {
             ESP_LOGW(TAG, "Country code: %s", esp_err_to_name(country));
         }
+        apply_tx_power(cfg);
         s_ap_active = true;
     } else {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
@@ -480,6 +495,7 @@ esp_err_t bb_wifi_start(const bb_config_t *cfg)
         if (country != ESP_OK) {
             ESP_LOGW(TAG, "Country code: %s", esp_err_to_name(country));
         }
+        apply_tx_power(cfg);
         ESP_LOGI(TAG, "Joining \"%s\" as %s", cfg->wifi_ssid, s_hostname);
         s_ap_active = true;
         attempt_station();
@@ -637,6 +653,7 @@ esp_err_t bb_wifi_apply_station(const bb_config_t *cfg, bool *joined)
         wifi_unlock();
         return err;
     }
+    apply_tx_power(cfg);
     ESP_LOGI(TAG, "Applying station \"%s\"", cfg->wifi_ssid);
     attempt_station();
     if (joined != NULL) {

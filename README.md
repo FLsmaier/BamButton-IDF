@@ -29,11 +29,45 @@ stateDiagram-v2
 
 If the stored network cannot be joined, the access point stays on. After a successful join it stays on for 60 seconds, which leaves time to finish a change from a phone on the setup network, and then it turns off. The page stays available on the station address and at `bambutton-376764.local`. If the station later drops, the access point comes back, and the 60 seconds start again on the next join.
 
-The same name is the DHCP and mDNS hostname. The station uses DHCP unless the network section sets a static IP, netmask, gateway, and optional DNS. While the access point is up it is at `192.168.4.1`, and the page shows the station SSID, address, netmask, and signal once that join succeeds. Apply network stores the station settings and joins immediately, without a restart, so the setup page stays open and printers can be loaded from it. Save and restart still stores the whole page and reboots. Factory reset on the page erases the stored settings and restarts into the setup access point.
+The same name is the DHCP and mDNS hostname. The station transmits at 8.5 dBm unless the network section turns that limit off. The station uses DHCP unless the network section sets a static IP, netmask, gateway, and optional DNS. While the access point is up it is at `192.168.4.1`, and the page shows the station SSID, address, netmask, and signal once that join succeeds. Apply network stores the station settings and joins immediately, without a restart, so the setup page stays open and printers can be loaded from it. Save and restart still stores the whole page and reboots. Factory reset on the page erases the stored settings and restarts into the setup access point.
 
-The LED defaults to GPIO3 and the button to GPIO4, the same ports as Bambutton. Leave the dropdowns alone to keep those. The page only lists the safe header pins: GPIO 0, 1, 3, 4, 5, 6, 7, 10, 20, and 21. GPIO 2, 8, and 9 are strapping pins: GPIO 9 is the BOOT button, GPIO 8 drives the onboard LED and must stay high to enter download mode, and GPIO 2 should stay high at reset. GPIO 11-17 are the in-package flash and GPIO 18-19 are USB, and none of those are on the header. GPIO 20 and 21 are UART0; the console on this board is USB, so they can be used after boot. Saving a pin change stores it and restarts the board.
+The LED and button dropdowns default to GPIO3 and GPIO4. The page only lists the safe header pins: GPIO 0, 1, 3, 4, 5, 6, 7, 10, 20, and 21. GPIO 2, 8, and 9 are strapping pins: GPIO 9 is the BOOT button, GPIO 8 drives the onboard LED and must stay high to enter download mode, and GPIO 2 should stay high at reset. GPIO 11-17 are the in-package flash and GPIO 18-19 are USB, and none of those are on the header. GPIO 20 and 21 are UART0; the console on this board is USB, so they can be used after boot. Saving a pin change stores it and restarts the board.
 
 To update a board that is already running, upload `bambutton-idf.bin` on the configuration page. Stored settings are kept. A blank chip is flashed from the release zip; [docs/README-FLASH.md](docs/README-FLASH.md) is the guide inside that zip. That flash erases the chip, including stored settings.
+
+## Wiring
+
+The default pins are the same as [Bambutton](https://github.com/EdwardChamberlain/Bambutton). Use the GPIO number, which is what the Super Mini silkscreen prints, and disconnect USB before changing a wire.
+
+```text
+GPIO3 -> LED -> GND
+GPIO4 -> button -> 3V3
+```
+
+On the usual board those holes are on one header row. Look at the component side with the USB-C socket at the top and the antenna at the bottom. The right row then reads, from the USB end, `5V`, `G`, `3.3`, `4`, `3`, `2`, `1`, `0`. The left row reads `5`, `6`, `7`, `8`, `9`, `10`, `20`, `21`. `G` is ground and `3.3` is the 3V3 output. If a board prints the numbers in another order, follow the silkscreen.
+
+```text
+                 USB-C
+          ┌─────────────────┐
+        5 ┤                 ├ 5V
+        6 ┤                 ├ G   ── LED cathode
+        7 ┤    ESP32-C3     ├ 3.3 ── button
+        8 ┤   Super Mini    ├ 4   ── button
+        9 ┤                 ├ 3   ── resistor ── LED anode
+       10 ┤                 ├ 2
+       20 ┤                 ├ 1
+       21 ┤                 ├ 0
+          └─────────────────┘
+                antenna
+```
+
+The button is a momentary switch. One side goes to GPIO4 and the other to 3V3. The firmware enables the internal pull-down and interrupts on the rising edge, so the pin sits low while the switch is open and goes high when it is pressed. An external pull-up is not needed, and the switch must not be wired to GND: that connection never rises, so the press is ignored.
+
+The LED is on while GPIO3 is high. Put a series resistor between GPIO3 and the LED anode, and connect the cathode to GND. The ESP32-C3 pins are 3.3 V. Do not connect a GPIO, the LED, or the switch to the 5V pin. If the LED draws more than a GPIO should source, drive it from 3V3 with a transistor and let GPIO3 switch that transistor.
+
+With no station associated, the LED toggles every 125 ms. While the printer is waiting for the plate to be cleared, it toggles every 250 ms. Otherwise it follows the printer's chamber light: on when that light is on.
+
+Boot prints the same two lines with the stored pins. After a pin change is saved, the next boot prints the new ones.
 
 ## Developing
 

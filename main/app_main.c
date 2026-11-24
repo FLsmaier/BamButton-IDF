@@ -150,8 +150,11 @@ static void log_config(const bb_config_t *cfg)
     log_row("LED", text);
     snprintf(text, sizeof(text), "GPIO %u", cfg->button_gpio);
     log_row("Button", text);
+    printf("  GPIO %u -> LED -> GND\n", cfg->led_gpio);
+    printf("  GPIO %u -> button -> 3V3\n", cfg->button_gpio);
     log_row("Wi-Fi SSID", cfg->wifi_ssid);
     log_row("Wi-Fi password", cfg->wifi_password[0] != '\0' ? "set" : "not set");
+    log_row("Wi-Fi power", cfg->wifi_low_tx ? "8.5 dBm" : "full");
     if (cfg->use_dhcp) {
         log_row("Station address", "DHCP");
     } else {

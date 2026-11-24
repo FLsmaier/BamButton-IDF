@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define BB_CONFIG_VERSION 3
+#define BB_CONFIG_VERSION 4
 
 /* Bambutton defaults: LED on GPIO3, button on GPIO4. */
 #define BB_LED_GPIO_DEFAULT 3
@@ -29,10 +29,12 @@
 #define BB_IPV4_CAP 16
 
 /*
- * Explicit pad keeps printer_id 4-byte aligned. led_gpio and button_gpio
- * occupy the two bytes that version 2 left reserved, so a version 2 blob
- * is the same size and is loaded with the default pins. A blob is rejected
- * when its size does not match, or when its version is neither 2 nor 3.
+ * wifi_low_tx and the pad keep printer_id 4-byte aligned. led_gpio and
+ * button_gpio occupy the two bytes that version 2 left reserved, so a
+ * version 2 blob is the same size and is loaded with the default pins.
+ * wifi_low_tx reuses a pad byte, so versions 2 and 3 stay the same size
+ * and load with the 8.5 dBm cap on. A blob is rejected when its size does
+ * not match, or when its version is not 2, 3, or 4.
  */
 typedef struct {
     uint32_t version;
@@ -44,7 +46,8 @@ typedef struct {
     char netmask[BB_IPV4_CAP];
     char gateway[BB_IPV4_CAP];
     char dns[BB_IPV4_CAP];
-    uint8_t pad_align[2];
+    uint8_t wifi_low_tx;
+    uint8_t pad_align;
     int32_t printer_id;
     uint8_t ignore_ssl;
     uint8_t use_dhcp;
@@ -78,6 +81,7 @@ bool bb_config_update(bb_config_t *cfg,
                       bool api_key_set,
                       bool ignore_ssl,
                       bool use_dhcp,
+                      bool wifi_low_tx,
                       const char *ip,
                       const char *netmask,
                       const char *gateway,
